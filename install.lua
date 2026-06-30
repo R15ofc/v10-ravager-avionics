@@ -1,5 +1,5 @@
-local SOURCE = "https://api.github.com/repos/R15ofc/v10-ravager-avionics/contents"
-local CACHE_BUST = "v3"
+local SOURCE = "https://raw.githubusercontent.com/R15ofc/v10-ravager-avionics/main"
+local CACHE_BUST = "v4"
 
 local args = { ... }
 local role = args[1]
@@ -42,9 +42,8 @@ local function backup(path)
 end
 
 local function fetch(path, binary)
-  local url = SOURCE .. "/" .. path .. "?ref=main&" .. CACHE_BUST
+  local url = SOURCE .. "/" .. path .. "?" .. CACHE_BUST
   local handle, err = http.get(url, {
-    ["Accept"] = "application/vnd.github.raw",
     ["User-Agent"] = "ComputerCraft",
   }, binary == true)
   if not handle then

@@ -9,6 +9,8 @@ local on_value = config.engine and config.engine.on_value or 15
 local off_value = config.engine and config.engine.off_value or 0
 local interval = config.engine and config.engine.status_interval or 0.25
 
+lib.write_engine(engine_side, analog, on_value)
+
 local speaker = lib.wrap_side(config.speaker and config.speaker.side, "speaker")
 if not speaker then
   speaker = lib.wrap_first("speaker")
@@ -22,8 +24,8 @@ else
 end
 
 local state = {
-  engine_on = false,
-  last_command = "boot",
+  engine_on = true,
+  last_command = "boot-on",
   last_display = nil,
   last_message_key = nil,
   boot_time = lib.now(),
@@ -95,7 +97,6 @@ local function handle(sender, message)
   end
 end
 
-apply_engine(false, "boot", true)
 lib.play_pattern(speaker, config, "link")
 
 print("V-10 engine node")
