@@ -14,6 +14,7 @@ local engine_seen = 0
 local last_local = {}
 local status_line = "boot"
 local buttons = {}
+local display_engine_on = true
 local pending_engine_on = nil
 local pending_until = 0
 
@@ -111,6 +112,10 @@ local function merged_telemetry()
     data.last_command = "pending"
   elseif pending_engine_on ~= nil then
     pending_engine_on = nil
+  elseif data.engine_on ~= nil then
+    display_engine_on = data.engine_on == true
+  else
+    data.engine_on = display_engine_on
   end
   return data
 end
@@ -180,9 +185,21 @@ local function send_command(packet, repeat_count)
   end
 end
 
-local function send_engine(value)
+local function set_local_engine(value)
+  display_engine_on = value == true
   pending_engine_on = value == true
   pending_until = lib.now() + timeout
+  if engine_packet and engine_packet.telemetry then
+    engine_packet.telemetry.engine_on = value == true
+    engine_packet.telemetry.last_command = "pending"
+  end
+  status_line = value and "engine on sent" or "engine off sent"
+end
+
+local function send_engine(value, already_local)
+  if not already_local then
+    set_local_engine(value)
+  end
   local packet = {
     aircraft = aircraft,
     role = "display",
@@ -192,11 +209,13 @@ local function send_engine(value)
     time = lib.now(),
   }
   send_command(packet)
-  if engine_packet and engine_packet.telemetry then
-    engine_packet.telemetry.engine_on = value == true
-    engine_packet.telemetry.last_command = "pending"
-  end
-  status_line = value and "engine on sent" or "engine off sent"
+end
+
+local function toggle_engine()
+  local value = not (merged_telemetry().engine_on == true)
+  set_local_engine(value)
+  draw()
+  send_engine(value, true)
 end
 
 local function send_sound(pattern)
@@ -228,6 +247,9 @@ local function handle_packet(sender, message)
     target_id = sender
     engine_packet = message
     engine_seen = lib.now()
+    if message.telemetry and message.telemetry.engine_on ~= nil then
+      display_engine_on = message.telemetry.engine_on == true
+    end
     if message.telemetry and message.telemetry.engine_on == pending_engine_on then
       pending_engine_on = nil
     end
@@ -257,24 +279,21 @@ while true do
     local clicked = find_button(x, y)
     if clicked then
       if clicked.action == "engine" then
-        send_engine(clicked.value == true)
+        toggle_engine()
       elseif clicked.action == "sound" then
         send_sound(clicked.value)
       end
-      draw()
     else
       local _, height = screen().getSize()
       if y == height then
-        send_engine(not (merged_telemetry().engine_on == true))
-        draw()
+        toggle_engine()
       end
     end
   elseif event == "mouse_click" and not monitor then
     local y = c
     local _, height = screen().getSize()
     if y == height then
-      send_engine(not (merged_telemetry().engine_on == true))
-      draw()
+      toggle_engine()
     end
   elseif event == "timer" and a == timer then
     last_local = lib.read_telemetry(config)
