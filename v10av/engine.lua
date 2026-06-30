@@ -25,6 +25,7 @@ local state = {
   engine_on = false,
   last_command = "boot",
   last_display = nil,
+  last_message_key = nil,
   boot_time = lib.now(),
 }
 
@@ -34,8 +35,14 @@ local function apply_engine(next_value, command, silent)
   state.last_command = command or "set"
   lib.write_engine(engine_side, analog, state.engine_on and on_value or off_value)
   if changed and not silent then
-    lib.play_pattern(speaker, config, state.engine_on and "engine_on" or "engine_off")
+    if state.engine_on then
+      lib.play_pattern(speaker, config, "engine_on")
+      lib.play_pattern(speaker, config, "warming_up")
+    else
+      lib.play_pattern(speaker, config, "engine_off")
+    end
   end
+  return changed
 end
 
 local function packet(kind)
@@ -65,14 +72,21 @@ local function handle(sender, message)
   end
 
   state.last_display = sender
+  local message_key = tostring(sender) .. ":" .. tostring(message.command) .. ":" .. tostring(message.time or "")
+  if message.time and state.last_message_key == message_key then
+    lib.send(sender, protocol, packet("ack"))
+    return
+  end
+  state.last_message_key = message_key
 
   if message.command == "set_engine" then
-    apply_engine(message.value == true, "remote")
-    lib.play_pattern(speaker, config, "ack")
+    local changed = apply_engine(message.value == true, "remote")
+    if not changed then
+      lib.play_pattern(speaker, config, "ack")
+    end
     lib.send(sender, protocol, packet("ack"))
   elseif message.command == "toggle_engine" then
     apply_engine(not state.engine_on, "remote-toggle")
-    lib.play_pattern(speaker, config, "ack")
     lib.send(sender, protocol, packet("ack"))
   elseif message.command == "ping" then
     lib.send(sender, protocol, packet("pong"))
@@ -88,6 +102,7 @@ print("V-10 engine node")
 print("ID: " .. os.getComputerID())
 print("Engine side: " .. engine_side)
 print("Speaker: " .. tostring(speaker ~= nil))
+print("Audio: " .. lib.audio_status(speaker, config, "link"))
 
 local timer = os.startTimer(interval)
 while true do

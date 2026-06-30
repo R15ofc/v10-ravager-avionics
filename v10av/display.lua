@@ -13,7 +13,7 @@ local engine_packet = nil
 local engine_seen = 0
 local last_local = {}
 local status_line = "boot"
-local button = { x1 = 1, y1 = 1, x2 = 1, y2 = 1 }
+local buttons = {}
 
 local function screen()
   return monitor or term
@@ -66,6 +66,22 @@ local function write_at(x, y, text, fg, bg)
   end
 end
 
+local function draw_button(action, value, x, y, label, bg, min_width)
+  local width = math.max(min_width or 0, #label)
+  local x2 = x + width - 1
+  table.insert(buttons, {
+    action = action,
+    value = value,
+    x1 = x,
+    y1 = y,
+    x2 = x2,
+    y2 = y,
+  })
+  write_at(x, y, string.rep(" ", width), colors.white, bg)
+  write_at(x + math.floor((width - #label) / 2), y, label, colors.white, bg)
+  return x2 + 2
+end
+
 local function merged_telemetry()
   local data = {}
   if engine_packet and engine_packet.telemetry then
@@ -88,6 +104,7 @@ local function draw()
   local telemetry = merged_telemetry()
   local linked = link_ok()
   local engine_on = telemetry.engine_on == true
+  buttons = {}
 
   clear()
   write_at(1, 1, "V-10 RAVAGER AVIONICS", colors.cyan)
@@ -113,13 +130,16 @@ local function draw()
   write_at(1, 13, "MASS", colors.lightGray)
   write_at(10, 13, lib.format_number(telemetry.mass, 0), colors.white)
 
+  if height >= 17 then
+    local x = 1
+    local y = height - 4
+    x = draw_button("sound", "caution", x, y, " CAUT ", colors.orange, 6)
+    x = draw_button("sound", "warning", x, y, " WARN ", colors.yellow, 6)
+    draw_button("sound", "critical", x, y, " CRIT ", colors.red, 6)
+  end
+
   local label = engine_on and " STOP ENGINE " or " START ENGINE "
-  local bx = 1
-  local by = height - 2
-  local bw = math.max(#label, 16)
-  button = { x1 = bx, y1 = by, x2 = bx + bw - 1, y2 = by }
-  write_at(bx, by, string.rep(" ", bw), colors.white, engine_on and colors.red or colors.green)
-  write_at(bx + math.floor((bw - #label) / 2), by, label, colors.white, engine_on and colors.red or colors.green)
+  draw_button("engine", not engine_on, 1, height - 2, label, engine_on and colors.red or colors.green, 16)
 
   write_at(1, height, status_line, colors.gray)
 end
@@ -139,6 +159,27 @@ local function send_engine(value)
     sleep(0.03)
   end
   status_line = "engine command sent"
+end
+
+local function send_sound(pattern)
+  lib.send(target_id, protocol, {
+    aircraft = aircraft,
+    role = "display",
+    type = "command",
+    command = "sound",
+    pattern = pattern,
+    time = lib.now(),
+  })
+  status_line = "sound " .. tostring(pattern) .. " sent"
+end
+
+local function find_button(x, y)
+  for _, candidate in ipairs(buttons) do
+    if x >= candidate.x1 and x <= candidate.x2 and y >= candidate.y1 and y <= candidate.y2 then
+      return candidate
+    end
+  end
+  return nil
 end
 
 local function handle_packet(sender, message)
@@ -172,9 +213,13 @@ while true do
     end
   elseif event == "monitor_touch" then
     local x, y = b, c
-    if x >= button.x1 and x <= button.x2 and y >= button.y1 and y <= button.y2 then
-      local telemetry = merged_telemetry()
-      send_engine(not telemetry.engine_on)
+    local clicked = find_button(x, y)
+    if clicked then
+      if clicked.action == "engine" then
+        send_engine(clicked.value == true)
+      elseif clicked.action == "sound" then
+        send_sound(clicked.value)
+      end
       draw()
     end
   elseif event == "mouse_click" and not monitor then

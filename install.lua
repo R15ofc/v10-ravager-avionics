@@ -1,5 +1,5 @@
 local SOURCE = "https://api.github.com/repos/R15ofc/v10-ravager-avionics/contents"
-local CACHE_BUST = "v2"
+local CACHE_BUST = "v3"
 
 local args = { ... }
 local role = args[1]
@@ -10,9 +10,13 @@ local FILES = {
   { source = "v10av/display.lua", target = "/v10av/display.lua", overwrite = true },
   { source = "v10av/engine.lua", target = "/v10av/engine.lua", overwrite = true },
   { source = "v10av/audio/ack.dfpwm", target = "/v10av/audio/ack.dfpwm", overwrite = true, binary = true },
+  { source = "v10av/audio/caution.dfpwm", target = "/v10av/audio/caution.dfpwm", overwrite = true, binary = true },
+  { source = "v10av/audio/critical.dfpwm", target = "/v10av/audio/critical.dfpwm", overwrite = true, binary = true },
   { source = "v10av/audio/engine_off.dfpwm", target = "/v10av/audio/engine_off.dfpwm", overwrite = true, binary = true },
   { source = "v10av/audio/engine_on.dfpwm", target = "/v10av/audio/engine_on.dfpwm", overwrite = true, binary = true },
   { source = "v10av/audio/link.dfpwm", target = "/v10av/audio/link.dfpwm", overwrite = true, binary = true },
+  { source = "v10av/audio/low_altitude.dfpwm", target = "/v10av/audio/low_altitude.dfpwm", overwrite = true, binary = true },
+  { source = "v10av/audio/warming_up.dfpwm", target = "/v10av/audio/warming_up.dfpwm", overwrite = true, binary = true },
   { source = "v10av/audio/warning.dfpwm", target = "/v10av/audio/warning.dfpwm", overwrite = true, binary = true },
 }
 

@@ -243,50 +243,48 @@ local function play_dfpwm(speaker, config, pattern, volume)
       break
     end
     local buffer = decoder(chunk)
-    while not speaker.playAudio(buffer, volume) do
+    local ok, played = pcall(speaker.playAudio, buffer, volume)
+    if not ok then
+      handle.close()
+      return false
+    end
+    while not played do
       os.pullEvent("speaker_audio_empty")
+      ok, played = pcall(speaker.playAudio, buffer, volume)
+      if not ok then
+        handle.close()
+        return false
+      end
     end
   end
   handle.close()
   return true
 end
 
+function lib.audio_status(speaker, config, pattern)
+  if not speaker then
+    return "no speaker"
+  end
+  if type(speaker.playAudio) ~= "function" then
+    return "no playAudio"
+  end
+  if not get_dfpwm() then
+    return "no dfpwm"
+  end
+  local path = audio_file(config, pattern or "link")
+  if not path or not fs.exists(path) then
+    return "missing audio"
+  end
+  return "dfpwm"
+end
+
 function lib.play_pattern(speaker, config, pattern)
   if not speaker then
-    return
+    return false
   end
   local volume = clamp_volume(config.speaker and config.speaker.volume or 1.0)
 
-  if play_dfpwm(speaker, config, pattern, volume) then
-    return
-  end
-
-  if pattern == "engine_on" then
-    speaker.playSound("minecraft:block.beacon.activate", volume, 1.0)
-    sleep(0.08)
-    speaker.playNote("bass", volume, 8)
-    sleep(0.08)
-    speaker.playNote("bass", volume, 11)
-    sleep(0.08)
-    speaker.playNote("bass", volume, 15)
-  elseif pattern == "engine_off" then
-    speaker.playSound("minecraft:block.beacon.deactivate", volume, 0.8)
-    sleep(0.08)
-    speaker.playNote("bass", volume, 10)
-    sleep(0.08)
-    speaker.playNote("bass", volume, 6)
-  elseif pattern == "ack" then
-    speaker.playNote("pling", volume, 18)
-  elseif pattern == "warning" then
-    for _ = 1, 3 do
-      speaker.playSound("minecraft:block.note_block.bass", volume, 0.5)
-      sleep(0.08)
-    end
-  elseif pattern == "link" then
-    speaker.playNote("bell", volume, 12)
-    sleep(0.06)
-    speaker.playNote("bell", volume, 16)
-  end
+  return play_dfpwm(speaker, config, pattern, volume)
 end
 
 function lib.write_engine(side, analog, value)
