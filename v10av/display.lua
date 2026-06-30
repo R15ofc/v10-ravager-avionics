@@ -14,6 +14,8 @@ local engine_seen = 0
 local last_local = {}
 local status_line = "boot"
 local buttons = {}
+local pending_engine_on = nil
+local pending_until = 0
 
 local function screen()
   return monitor or term
@@ -104,6 +106,12 @@ local function merged_telemetry()
     lib.merge(data, engine_packet.telemetry)
   end
   lib.merge(data, last_local)
+  if pending_engine_on ~= nil and lib.now() <= pending_until then
+    data.engine_on = pending_engine_on
+    data.last_command = "pending"
+  elseif pending_engine_on ~= nil then
+    pending_engine_on = nil
+  end
   return data
 end
 
@@ -151,14 +159,14 @@ local function draw()
   row(6, "UP", lib.format_number(telemetry.uptime, 0) .. " s", colors.white, "SHIP", telemetry.id or "--", colors.white)
   row(7, "RX", linked and (lib.format_number(lib.now() - engine_seen, 1) .. " s") or "--", linked and colors.lime or colors.red, "PC", target_id or "--", colors.white)
 
-  local button_top = math.max(1, height - 2)
+  local button_top = height
   if button_top > 1 then
     write_at(1, button_top - 1, fit(status_line, width), colors.gray)
   end
 
   local button_bg = engine_known and (engine_on and colors.green or colors.red) or colors.gray
   local label = " ENGINE: " .. engine_text .. " "
-  draw_button("engine", engine_known and not engine_on or true, 1, button_top, label, button_bg, width, height - button_top + 1)
+  draw_button("engine", engine_known and not engine_on or true, 1, button_top, label, button_bg, width, 1)
 end
 
 local function send_command(packet, repeat_count)
@@ -173,6 +181,8 @@ local function send_command(packet, repeat_count)
 end
 
 local function send_engine(value)
+  pending_engine_on = value == true
+  pending_until = lib.now() + timeout
   local packet = {
     aircraft = aircraft,
     role = "display",
@@ -218,6 +228,9 @@ local function handle_packet(sender, message)
     target_id = sender
     engine_packet = message
     engine_seen = lib.now()
+    if message.telemetry and message.telemetry.engine_on == pending_engine_on then
+      pending_engine_on = nil
+    end
     status_line = "engine packet " .. tostring(message.type)
     return true
   end
@@ -251,7 +264,7 @@ while true do
       draw()
     else
       local _, height = screen().getSize()
-      if y >= math.max(1, height - 2) then
+      if y == height then
         send_engine(not (merged_telemetry().engine_on == true))
         draw()
       end
@@ -259,7 +272,7 @@ while true do
   elseif event == "mouse_click" and not monitor then
     local y = c
     local _, height = screen().getSize()
-    if y >= math.max(1, height - 2) then
+    if y == height then
       send_engine(not (merged_telemetry().engine_on == true))
       draw()
     end
