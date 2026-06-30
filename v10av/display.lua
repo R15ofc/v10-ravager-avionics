@@ -66,6 +66,18 @@ local function write_at(x, y, text, fg, bg)
   end
 end
 
+local function fit(text, width)
+  text = tostring(text == nil and "--" or text)
+  if width <= 0 then
+    return ""
+  elseif #text <= width then
+    return text
+  elseif width == 1 then
+    return string.sub(text, 1, 1)
+  end
+  return string.sub(text, 1, width - 1) .. "~"
+end
+
 local function draw_button(action, value, x, y, label, bg, min_width)
   local width = math.max(min_width or 0, #label)
   local x2 = x + width - 1
@@ -103,45 +115,45 @@ local function draw()
   end
   local telemetry = merged_telemetry()
   local linked = link_ok()
+  local engine_known = telemetry.engine_on ~= nil
   local engine_on = telemetry.engine_on == true
+  local engine_text = engine_known and (engine_on and "ON" or "OFF") or "--"
+  local left_value_x = 7
+  local right_key_x = math.max(18, math.floor(width / 2) + 1)
+  local right_value_x = math.min(width, right_key_x + 6)
+  local left_value_width = math.max(1, right_key_x - left_value_x - 1)
+  local right_value_width = math.max(1, width - right_value_x + 1)
   buttons = {}
 
   clear()
-  write_at(1, 1, "V-10 RAVAGER AVIONICS", colors.cyan)
-  write_at(1, 2, string.rep("-", math.min(width, 32)), colors.gray)
 
-  write_at(1, 4, "SPD", colors.lightGray)
-  write_at(8, 4, lib.format_number(telemetry.speed, 1) .. " m/s", colors.white)
-  write_at(1, 5, "ALT", colors.lightGray)
-  write_at(8, 5, lib.format_number(telemetry.altitude, 1), colors.white)
-  write_at(1, 6, "V/S", colors.lightGray)
-  write_at(8, 6, lib.format_number(telemetry.vertical_speed, 1) .. " m/s", colors.white)
-  write_at(1, 7, "AOA", colors.lightGray)
-  write_at(8, 7, lib.format_number(telemetry.aoa, 1), colors.white)
-
-  write_at(1, 9, "ENGINE", colors.lightGray)
-  write_at(10, 9, engine_on and "ON" or "OFF", engine_on and colors.lime or colors.red)
-  write_at(1, 10, "LINK", colors.lightGray)
-  write_at(10, 10, linked and ("OK #" .. tostring(target_id)) or "NO DATA", linked and colors.lime or colors.red)
-  write_at(1, 11, "CMD", colors.lightGray)
-  write_at(10, 11, tostring(telemetry.last_command or "--"), colors.white)
-  write_at(1, 12, "UPTIME", colors.lightGray)
-  write_at(10, 12, lib.format_number(telemetry.uptime, 0) .. " s", colors.white)
-  write_at(1, 13, "MASS", colors.lightGray)
-  write_at(10, 13, lib.format_number(telemetry.mass, 0), colors.white)
-
-  if height >= 17 then
-    local x = 1
-    local y = height - 4
-    x = draw_button("sound", "caution", x, y, " CAUT ", colors.orange, 6)
-    x = draw_button("sound", "warning", x, y, " WARN ", colors.yellow, 6)
-    draw_button("sound", "critical", x, y, " CRIT ", colors.red, 6)
+  local function row(y, left_key, left_value, left_color, right_key, right_value, right_color)
+    if y >= height then
+      return
+    end
+    write_at(1, y, fit(left_key, 5), colors.lightGray)
+    write_at(left_value_x, y, fit(left_value, left_value_width), left_color or colors.white)
+    if width >= 24 and right_key then
+      write_at(right_key_x, y, fit(right_key, 5), colors.lightGray)
+      write_at(right_value_x, y, fit(right_value, right_value_width), right_color or colors.white)
+    end
   end
 
-  local label = engine_on and " STOP ENGINE " or " START ENGINE "
-  draw_button("engine", not engine_on, 1, height - 2, label, engine_on and colors.red or colors.green, 16)
+  row(1, "ENG", engine_text, engine_on and colors.lime or colors.red, "LINK", linked and ("OK #" .. tostring(target_id)) or "NO DATA", linked and colors.lime or colors.red)
+  row(2, "AUD", telemetry.audio or "--", telemetry.audio and colors.cyan or colors.gray, "CMD", telemetry.last_command or "--", colors.white)
+  row(3, "SPD", lib.format_number(telemetry.speed, 1) .. " m/s", colors.white, "ALT", lib.format_number(telemetry.altitude, 1), colors.white)
+  row(4, "V/S", lib.format_number(telemetry.vertical_speed, 1) .. " m/s", colors.white, "AOA", lib.format_number(telemetry.aoa, 1), colors.white)
+  row(5, "MASS", lib.format_number(telemetry.mass, 0), colors.white, "SIDE", telemetry.engine_side or "--", colors.white)
+  row(6, "UP", lib.format_number(telemetry.uptime, 0) .. " s", colors.white, "SHIP", telemetry.id or "--", colors.white)
+  row(7, "RX", linked and (lib.format_number(lib.now() - engine_seen, 1) .. " s") or "--", linked and colors.lime or colors.red, "PC", target_id or "--", colors.white)
 
-  write_at(1, height, status_line, colors.gray)
+  if height > 2 then
+    write_at(1, height - 1, fit(status_line, width), colors.gray)
+  end
+
+  local button_bg = engine_known and (engine_on and colors.green or colors.red) or colors.gray
+  local label = " ENGINE: " .. engine_text .. " "
+  draw_button("engine", engine_known and not engine_on or true, 1, height, label, button_bg, width)
 end
 
 local function send_engine(value)
@@ -158,7 +170,11 @@ local function send_engine(value)
     lib.send(target_id, protocol, packet)
     sleep(0.03)
   end
-  status_line = "engine command sent"
+  if engine_packet and engine_packet.telemetry then
+    engine_packet.telemetry.engine_on = value == true
+    engine_packet.telemetry.last_command = "pending"
+  end
+  status_line = value and "engine on sent" or "engine off sent"
 end
 
 local function send_sound(pattern)

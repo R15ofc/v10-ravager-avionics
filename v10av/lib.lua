@@ -181,6 +181,63 @@ end
 
 local dfpwm_checked = false
 local dfpwm_module = nil
+local dfpwm_source = nil
+
+local function make_local_dfpwm_decoder()
+  local charge = 0
+  local strength = 0
+  local predictor_previous_bit = false
+  local low_pass_charge = 0
+  local previous_charge = 0
+  local previous_bit = false
+
+  local function predict(current_bit)
+    local target = current_bit and 127 or -128
+    local next_charge = charge + math.floor((strength * (target - charge) + 512) / 1024)
+    if next_charge == charge and next_charge ~= target then
+      next_charge = next_charge + (current_bit and 1 or -1)
+    end
+
+    local target_strength = current_bit == predictor_previous_bit and 1023 or 0
+    local next_strength = strength
+    if next_strength ~= target_strength then
+      next_strength = next_strength + (current_bit == predictor_previous_bit and 1 or -1)
+    end
+    if next_strength < 8 then
+      next_strength = 8
+    end
+
+    charge = next_charge
+    strength = next_strength
+    predictor_previous_bit = current_bit
+    return charge
+  end
+
+  return function(input)
+    local output = {}
+    local output_n = 0
+    for i = 1, #input do
+      local input_byte = string.byte(input, i)
+      for _ = 1, 8 do
+        local current_bit = input_byte % 2 == 1
+        local next_charge = predict(current_bit)
+        local antijerk = next_charge
+        if current_bit ~= previous_bit then
+          antijerk = math.floor((next_charge + previous_charge + 1) / 2)
+        end
+
+        previous_charge = next_charge
+        previous_bit = current_bit
+        low_pass_charge = low_pass_charge + math.floor(((antijerk - low_pass_charge) * 140 + 128) / 256)
+
+        output_n = output_n + 1
+        output[output_n] = low_pass_charge
+        input_byte = math.floor(input_byte / 2)
+      end
+    end
+    return output
+  end
+end
 
 local function get_dfpwm()
   if dfpwm_checked then
@@ -188,11 +245,17 @@ local function get_dfpwm()
   end
   dfpwm_checked = true
   if type(require) ~= "function" then
-    return nil
+    dfpwm_module = { make_decoder = make_local_dfpwm_decoder }
+    dfpwm_source = "local"
+    return dfpwm_module
   end
   local ok, module = pcall(require, "cc.audio.dfpwm")
   if ok and type(module) == "table" and type(module.make_decoder) == "function" then
     dfpwm_module = module
+    dfpwm_source = "cc"
+  else
+    dfpwm_module = { make_decoder = make_local_dfpwm_decoder }
+    dfpwm_source = "local"
   end
   return dfpwm_module
 end
@@ -275,7 +338,7 @@ function lib.audio_status(speaker, config, pattern)
   if not path or not fs.exists(path) then
     return "missing audio"
   end
-  return "dfpwm"
+  return dfpwm_source == "cc" and "dfpwm" or "dfpwm-local"
 end
 
 function lib.play_pattern(speaker, config, pattern)

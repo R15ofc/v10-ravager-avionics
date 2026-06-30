@@ -51,6 +51,7 @@ local function packet(kind)
   local telemetry = lib.read_telemetry(config)
   telemetry.engine_on = state.engine_on
   telemetry.engine_side = engine_side
+  telemetry.audio = lib.audio_status(speaker, config, "link")
   telemetry.uptime = lib.now() - state.boot_time
   telemetry.last_command = state.last_command
   return {
