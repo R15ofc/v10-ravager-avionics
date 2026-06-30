@@ -8,12 +8,53 @@ local function pcall_value(fn, ...)
   return nil
 end
 
+local function pcall_method(object, name)
+  if type(object) ~= "table" or type(object[name]) ~= "function" then
+    return nil
+  end
+  local value = pcall_value(object[name])
+  if value ~= nil then
+    return value
+  end
+  return pcall_value(object[name], object)
+end
+
 local function number_or_nil(value)
   value = tonumber(value)
   if value == nil or value ~= value then
     return nil
   end
   return value
+end
+
+local function vector_number(value, key, index, getter)
+  if type(value) ~= "table" then
+    return nil
+  end
+  local direct = number_or_nil(value[key] or value[index])
+  if direct ~= nil then
+    return direct
+  end
+  if type(value[getter]) == "function" then
+    return number_or_nil(pcall_value(value[getter], value))
+  end
+  if type(value[key]) == "function" then
+    return number_or_nil(pcall_value(value[key], value))
+  end
+  return nil
+end
+
+local function vector_xyz(value)
+  if type(value) ~= "table" then
+    return nil
+  end
+  local x = vector_number(value, "x", 1, "getX")
+  local y = vector_number(value, "y", 2, "getY")
+  local z = vector_number(value, "z", 3, "getZ")
+  if x == nil and y == nil and z == nil then
+    return nil
+  end
+  return x or 0, y or 0, z or 0
 end
 
 function lib.load_config()
@@ -92,30 +133,44 @@ function lib.now()
   return os.clock()
 end
 
+local ship_last = nil
+
 function lib.read_ship()
   local data = {}
   if type(ship) ~= "table" then
     return data
   end
 
-  local velocity = pcall_value(ship.getVelocity)
-  if type(velocity) == "table" then
-    local x = number_or_nil(velocity.x or velocity[1]) or 0
-    local y = number_or_nil(velocity.y or velocity[2]) or 0
-    local z = number_or_nil(velocity.z or velocity[3]) or 0
+  local velocity = pcall_method(ship, "getVelocity")
+  local vx, vy, vz = vector_xyz(velocity)
+  if vx then
+    local x, y, z = vx, vy, vz
     data.speed = math.sqrt(x * x + y * y + z * z)
     data.vertical_speed = y
   end
 
-  local position = pcall_value(ship.getWorldspacePosition) or pcall_value(ship.getPosition)
-  if type(position) == "table" then
-    data.altitude = number_or_nil(position.y or position[2])
+  local position = pcall_method(ship, "getWorldspacePosition") or pcall_method(ship, "getPosition")
+  local px, py, pz = vector_xyz(position)
+  if px then
+    data.altitude = py
+    local now = lib.now()
+    if ship_last and data.speed == nil then
+      local dt = now - ship_last.t
+      if dt > 0 then
+        local dx = px - ship_last.x
+        local dy = py - ship_last.y
+        local dz = pz - ship_last.z
+        data.speed = math.sqrt(dx * dx + dy * dy + dz * dz) / dt
+        data.vertical_speed = dy / dt
+      end
+    end
+    ship_last = { x = px, y = py, z = pz, t = now }
   end
 
-  data.mass = number_or_nil(pcall_value(ship.getMass))
-  data.id = pcall_value(ship.getId) or pcall_value(ship.getSlug)
+  data.mass = number_or_nil(pcall_method(ship, "getMass"))
+  data.id = pcall_method(ship, "getId") or pcall_method(ship, "getSlug")
 
-  local pitch = number_or_nil(pcall_value(ship.getPitch))
+  local pitch = number_or_nil(pcall_method(ship, "getPitch"))
   if pitch then
     data.aoa = pitch
     data.aoa_source = "pitch"

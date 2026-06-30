@@ -106,7 +106,11 @@ local function merged_telemetry()
   if engine_packet and engine_packet.telemetry then
     lib.merge(data, engine_packet.telemetry)
   end
-  lib.merge(data, last_local)
+  for key, value in pairs(last_local or {}) do
+    if data[key] == nil and value ~= nil then
+      data[key] = value
+    end
+  end
   if pending_engine_on ~= nil and lib.now() <= pending_until then
     data.engine_on = pending_engine_on
     data.last_command = "pending"
@@ -157,11 +161,11 @@ local function draw()
   end
 
   row(1, "ENG", engine_text, engine_on and colors.lime or colors.red, "LINK", linked and ("OK #" .. tostring(target_id)) or "NO DATA", linked and colors.lime or colors.red)
-  row(2, "AUD", telemetry.audio or "--", telemetry.audio and colors.cyan or colors.gray, "CMD", telemetry.last_command or "--", colors.white)
-  row(3, "SPD", lib.format_number(telemetry.speed, 1) .. " m/s", colors.white, "ALT", lib.format_number(telemetry.altitude, 1), colors.white)
-  row(4, "V/S", lib.format_number(telemetry.vertical_speed, 1) .. " m/s", colors.white, "AOA", lib.format_number(telemetry.aoa, 1), colors.white)
-  row(5, "MASS", lib.format_number(telemetry.mass, 0), colors.white, "SIDE", telemetry.engine_side or "--", colors.white)
-  row(6, "UP", lib.format_number(telemetry.uptime, 0) .. " s", colors.white, "SHIP", telemetry.id or "--", colors.white)
+  row(2, "ALT", lib.format_number(telemetry.altitude, 1), colors.white, "CMD", telemetry.last_command or "--", colors.white)
+  row(3, "SPD", lib.format_number(telemetry.speed, 1) .. " m/s", colors.white, "V/S", lib.format_number(telemetry.vertical_speed, 1) .. " m/s", colors.white)
+  row(4, "AOA", lib.format_number(telemetry.aoa, 1), colors.white, "SIDE", telemetry.engine_side or "--", colors.white)
+  row(5, "MASS", lib.format_number(telemetry.mass, 0), colors.white, "SHIP", telemetry.id or "--", colors.white)
+  row(6, "UP", lib.format_number(telemetry.uptime, 0) .. " s", colors.white, nil, nil, nil)
   row(7, "RX", linked and (lib.format_number(lib.now() - engine_seen, 1) .. " s") or "--", linked and colors.lime or colors.red, "PC", target_id or "--", colors.white)
   row(8, "ALR", telemetry.altitude_alerts and "ON" or "--", telemetry.altitude_alerts and colors.lime or colors.gray, nil, nil, nil)
 

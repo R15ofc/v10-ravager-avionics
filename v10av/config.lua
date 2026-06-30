@@ -1,5 +1,5 @@
 return {
-  config_version = 7,
+  config_version = 8,
 
   aircraft_id = "v10-ravager",
   protocol = "v10_avionics_v1",
