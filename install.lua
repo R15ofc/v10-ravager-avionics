@@ -1,5 +1,5 @@
 local SOURCE = "https://raw.githubusercontent.com/R15ofc/v10-ravager-avionics/main"
-local CACHE_BUST = "v5"
+local CACHE_BUST = "v6"
 
 local args = { ... }
 local role = args[1]

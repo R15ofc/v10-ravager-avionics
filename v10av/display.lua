@@ -78,19 +78,23 @@ local function fit(text, width)
   return string.sub(text, 1, width - 1) .. "~"
 end
 
-local function draw_button(action, value, x, y, label, bg, min_width)
+local function draw_button(action, value, x, y, label, bg, min_width, height)
   local width = math.max(min_width or 0, #label)
+  local button_height = math.max(1, height or 1)
   local x2 = x + width - 1
+  local y2 = y + button_height - 1
   table.insert(buttons, {
     action = action,
     value = value,
     x1 = x,
     y1 = y,
     x2 = x2,
-    y2 = y,
+    y2 = y2,
   })
-  write_at(x, y, string.rep(" ", width), colors.white, bg)
-  write_at(x + math.floor((width - #label) / 2), y, label, colors.white, bg)
+  for row = y, y2 do
+    write_at(x, row, string.rep(" ", width), colors.white, bg)
+  end
+  write_at(x + math.floor((width - #label) / 2), y + math.floor((button_height - 1) / 2), label, colors.white, bg)
   return x2 + 2
 end
 
@@ -147,13 +151,25 @@ local function draw()
   row(6, "UP", lib.format_number(telemetry.uptime, 0) .. " s", colors.white, "SHIP", telemetry.id or "--", colors.white)
   row(7, "RX", linked and (lib.format_number(lib.now() - engine_seen, 1) .. " s") or "--", linked and colors.lime or colors.red, "PC", target_id or "--", colors.white)
 
-  if height > 2 then
-    write_at(1, height - 1, fit(status_line, width), colors.gray)
+  local button_top = math.max(1, height - 2)
+  if button_top > 1 then
+    write_at(1, button_top - 1, fit(status_line, width), colors.gray)
   end
 
   local button_bg = engine_known and (engine_on and colors.green or colors.red) or colors.gray
   local label = " ENGINE: " .. engine_text .. " "
-  draw_button("engine", engine_known and not engine_on or true, 1, height, label, button_bg, width)
+  draw_button("engine", engine_known and not engine_on or true, 1, button_top, label, button_bg, width, height - button_top + 1)
+end
+
+local function send_command(packet, repeat_count)
+  repeat_count = repeat_count or (config.display and config.display.command_repeat or 2)
+  for _ = 1, repeat_count do
+    if target_id then
+      lib.send(target_id, protocol, packet)
+    end
+    lib.send(nil, protocol, packet)
+    sleep(0.03)
+  end
 end
 
 local function send_engine(value)
@@ -165,11 +181,7 @@ local function send_engine(value)
     value = value,
     time = lib.now(),
   }
-  local repeat_count = config.display and config.display.command_repeat or 2
-  for _ = 1, repeat_count do
-    lib.send(target_id, protocol, packet)
-    sleep(0.03)
-  end
+  send_command(packet)
   if engine_packet and engine_packet.telemetry then
     engine_packet.telemetry.engine_on = value == true
     engine_packet.telemetry.last_command = "pending"
@@ -178,14 +190,14 @@ local function send_engine(value)
 end
 
 local function send_sound(pattern)
-  lib.send(target_id, protocol, {
+  send_command({
     aircraft = aircraft,
     role = "display",
     type = "command",
     command = "sound",
     pattern = pattern,
     time = lib.now(),
-  })
+  }, 1)
   status_line = "sound " .. tostring(pattern) .. " sent"
 end
 
@@ -237,10 +249,20 @@ while true do
         send_sound(clicked.value)
       end
       draw()
+    else
+      local _, height = screen().getSize()
+      if y >= math.max(1, height - 2) then
+        send_engine(not (merged_telemetry().engine_on == true))
+        draw()
+      end
     end
   elseif event == "mouse_click" and not monitor then
-    send_engine(not (merged_telemetry().engine_on == true))
-    draw()
+    local y = c
+    local _, height = screen().getSize()
+    if y >= math.max(1, height - 2) then
+      send_engine(not (merged_telemetry().engine_on == true))
+      draw()
+    end
   elseif event == "timer" and a == timer then
     last_local = lib.read_telemetry(config)
     draw()
