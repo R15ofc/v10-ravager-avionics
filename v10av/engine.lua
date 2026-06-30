@@ -28,11 +28,14 @@ local state = {
   boot_time = lib.now(),
 }
 
-local function apply_engine(next_value, command)
+local function apply_engine(next_value, command, silent)
+  local changed = state.engine_on ~= (next_value == true)
   state.engine_on = next_value == true
   state.last_command = command or "set"
   lib.write_engine(engine_side, analog, state.engine_on and on_value or off_value)
-  lib.play_pattern(speaker, config, state.engine_on and "engine_on" or "engine_off")
+  if changed and not silent then
+    lib.play_pattern(speaker, config, state.engine_on and "engine_on" or "engine_off")
+  end
 end
 
 local function packet(kind)
@@ -78,7 +81,7 @@ local function handle(sender, message)
   end
 end
 
-apply_engine(false, "boot")
+apply_engine(false, "boot", true)
 lib.play_pattern(speaker, config, "link")
 
 print("V-10 engine node")

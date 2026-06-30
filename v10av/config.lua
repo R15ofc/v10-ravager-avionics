@@ -1,5 +1,5 @@
 return {
-  config_version = 1,
+  config_version = 2,
 
   aircraft_id = "v10-ravager",
   protocol = "v10_avionics_v1",
@@ -26,5 +26,7 @@ return {
   speaker = {
     side = "top",
     volume = 1.0,
+    audio_enabled = true,
+    audio_path = "/v10av/audio",
   },
 }

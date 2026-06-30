@@ -179,11 +179,87 @@ function lib.read_telemetry(config)
   return data
 end
 
+local dfpwm_checked = false
+local dfpwm_module = nil
+
+local function get_dfpwm()
+  if dfpwm_checked then
+    return dfpwm_module
+  end
+  dfpwm_checked = true
+  if type(require) ~= "function" then
+    return nil
+  end
+  local ok, module = pcall(require, "cc.audio.dfpwm")
+  if ok and type(module) == "table" and type(module.make_decoder) == "function" then
+    dfpwm_module = module
+  end
+  return dfpwm_module
+end
+
+local function clamp_volume(value)
+  value = tonumber(value) or 1.0
+  if value < 0 then
+    return 0
+  elseif value > 3 then
+    return 3
+  end
+  return value
+end
+
+local function audio_file(config, pattern)
+  local speaker_config = config.speaker or {}
+  if speaker_config.audio_enabled == false then
+    return nil
+  end
+  local base = speaker_config.audio_path or "/v10av/audio"
+  return fs.combine(base, pattern .. ".dfpwm")
+end
+
+local function play_dfpwm(speaker, config, pattern, volume)
+  if not fs or not os or not speaker or type(speaker.playAudio) ~= "function" then
+    return false
+  end
+
+  local dfpwm = get_dfpwm()
+  local path = audio_file(config, pattern)
+  if not dfpwm or not path or not fs.exists(path) then
+    return false
+  end
+
+  local handle = fs.open(path, "rb")
+  if not handle then
+    return false
+  end
+
+  local decoder = dfpwm.make_decoder()
+  if type(speaker.stop) == "function" then
+    speaker.stop()
+  end
+
+  while true do
+    local chunk = handle.read(16 * 1024)
+    if not chunk then
+      break
+    end
+    local buffer = decoder(chunk)
+    while not speaker.playAudio(buffer, volume) do
+      os.pullEvent("speaker_audio_empty")
+    end
+  end
+  handle.close()
+  return true
+end
+
 function lib.play_pattern(speaker, config, pattern)
   if not speaker then
     return
   end
-  local volume = config.speaker and config.speaker.volume or 1.0
+  local volume = clamp_volume(config.speaker and config.speaker.volume or 1.0)
+
+  if play_dfpwm(speaker, config, pattern, volume) then
+    return
+  end
 
   if pattern == "engine_on" then
     speaker.playSound("minecraft:block.beacon.activate", volume, 1.0)

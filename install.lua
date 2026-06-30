@@ -1,5 +1,5 @@
 local SOURCE = "https://api.github.com/repos/R15ofc/v10-ravager-avionics/contents"
-local CACHE_BUST = "v1"
+local CACHE_BUST = "v2"
 
 local args = { ... }
 local role = args[1]
@@ -9,6 +9,11 @@ local FILES = {
   { source = "v10av/lib.lua", target = "/v10av/lib.lua", overwrite = true },
   { source = "v10av/display.lua", target = "/v10av/display.lua", overwrite = true },
   { source = "v10av/engine.lua", target = "/v10av/engine.lua", overwrite = true },
+  { source = "v10av/audio/ack.dfpwm", target = "/v10av/audio/ack.dfpwm", overwrite = true, binary = true },
+  { source = "v10av/audio/engine_off.dfpwm", target = "/v10av/audio/engine_off.dfpwm", overwrite = true, binary = true },
+  { source = "v10av/audio/engine_on.dfpwm", target = "/v10av/audio/engine_on.dfpwm", overwrite = true, binary = true },
+  { source = "v10av/audio/link.dfpwm", target = "/v10av/audio/link.dfpwm", overwrite = true, binary = true },
+  { source = "v10av/audio/warning.dfpwm", target = "/v10av/audio/warning.dfpwm", overwrite = true, binary = true },
 }
 
 local function ensure_dir(path)
@@ -32,12 +37,12 @@ local function backup(path)
   return candidate
 end
 
-local function fetch(path)
+local function fetch(path, binary)
   local url = SOURCE .. "/" .. path .. "?ref=main&" .. CACHE_BUST
   local handle, err = http.get(url, {
     ["Accept"] = "application/vnd.github.raw",
     ["User-Agent"] = "ComputerCraft",
-  })
+  }, binary == true)
   if not handle then
     error("download failed: " .. url .. " (" .. tostring(err) .. ")")
   end
@@ -50,7 +55,7 @@ local function fetch(path)
   return body or ""
 end
 
-local function write_file(path, body, do_backup)
+local function write_file(path, body, do_backup, binary)
   ensure_dir(path)
   if do_backup and fs.exists(path) then
     local saved = backup(path)
@@ -58,7 +63,7 @@ local function write_file(path, body, do_backup)
       print("backup " .. path .. " -> " .. saved)
     end
   end
-  local handle = fs.open(path, "w")
+  local handle = fs.open(path, binary and "wb" or "w")
   if not handle then
     error("cannot write " .. path)
   end
@@ -94,7 +99,7 @@ print("Installing V-10 avionics: " .. role)
 
 for _, file in ipairs(FILES) do
   if file.overwrite or not fs.exists(file.target) then
-    write_file(file.target, fetch(file.source), file.overwrite)
+    write_file(file.target, fetch(file.source, file.binary), file.overwrite, file.binary)
   else
     print("kept " .. file.target)
   end
