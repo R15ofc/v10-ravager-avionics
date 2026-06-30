@@ -1,5 +1,5 @@
-local SOURCE = "https://raw.githubusercontent.com/R15ofc/v10-ravager-avionics/0e147780484dda374d5a8f56594c850d772ff25d"
-local CACHE_BUST = "pinned-0e147780"
+local SOURCE = "https://raw.githubusercontent.com/R15ofc/v10-ravager-avionics/72f85b5cc7d4c2e6cd3d272c2c841a80b061ec39"
+local CACHE_BUST = "pinned-72f85b5c"
 
 local args = { ... }
 local role = args[1]
