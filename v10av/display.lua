@@ -163,6 +163,7 @@ local function draw()
   row(5, "MASS", lib.format_number(telemetry.mass, 0), colors.white, "SIDE", telemetry.engine_side or "--", colors.white)
   row(6, "UP", lib.format_number(telemetry.uptime, 0) .. " s", colors.white, "SHIP", telemetry.id or "--", colors.white)
   row(7, "RX", linked and (lib.format_number(lib.now() - engine_seen, 1) .. " s") or "--", linked and colors.lime or colors.red, "PC", target_id or "--", colors.white)
+  row(8, "ALR", telemetry.altitude_alerts and "ON" or "--", telemetry.altitude_alerts and colors.lime or colors.gray, nil, nil, nil)
 
   local button_top = height
   if button_top > 1 then

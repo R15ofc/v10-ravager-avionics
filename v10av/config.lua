@@ -1,5 +1,5 @@
 return {
-  config_version = 6,
+  config_version = 7,
 
   aircraft_id = "v10-ravager",
   protocol = "v10_avionics_v1",
@@ -28,5 +28,13 @@ return {
     volume = 1.0,
     audio_enabled = true,
     audio_path = "/v10av/audio",
+  },
+
+  altitude_alerts = {
+    enabled = true,
+    thresholds = { 100, 50, 40, 30, 20 },
+    low_altitude = 20,
+    low_altitude_repeat = 6.0,
+    reset_above = 120,
   },
 }

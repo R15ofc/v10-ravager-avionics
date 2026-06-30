@@ -28,6 +28,8 @@ local state = {
   last_command = "boot-on",
   last_display = nil,
   last_message_key = nil,
+  altitude_called = {},
+  low_altitude_last = 0,
   boot_time = lib.now(),
 }
 
@@ -47,13 +49,56 @@ local function apply_engine(next_value, command, silent)
   return changed
 end
 
-local function packet(kind)
-  local telemetry = lib.read_telemetry(config)
+local function altitude_alerts()
+  return config.altitude_alerts or {}
+end
+
+local function process_altitude_alerts(telemetry)
+  local alerts = altitude_alerts()
+  if alerts.enabled == false or telemetry.altitude == nil then
+    return
+  end
+
+  local altitude = tonumber(telemetry.altitude)
+  if not altitude then
+    return
+  end
+
+  local reset_above = tonumber(alerts.reset_above) or 120
+  if altitude >= reset_above then
+    state.altitude_called = {}
+    return
+  end
+
+  local thresholds = alerts.thresholds or { 100, 50, 40, 30, 20 }
+  for index = #thresholds, 1, -1 do
+    local threshold = thresholds[index]
+    local level = tonumber(threshold)
+    if level and altitude <= level and not state.altitude_called[level] then
+      state.altitude_called[level] = true
+      lib.play_pattern(speaker, config, "altitude_" .. tostring(level))
+      return
+    end
+  end
+
+  local low_altitude = tonumber(alerts.low_altitude) or 20
+  if altitude <= low_altitude then
+    local now = lib.now()
+    local repeat_after = tonumber(alerts.low_altitude_repeat) or 6.0
+    if now - state.low_altitude_last >= repeat_after then
+      state.low_altitude_last = now
+      lib.play_pattern(speaker, config, "low_altitude")
+    end
+  end
+end
+
+local function make_packet(kind, telemetry)
   telemetry.engine_on = state.engine_on
   telemetry.engine_side = engine_side
   telemetry.audio = lib.audio_status(speaker, config, "link")
   telemetry.uptime = lib.now() - state.boot_time
   telemetry.last_command = state.last_command
+  telemetry.altitude_alerts = altitude_alerts().enabled ~= false
   return {
     aircraft = aircraft,
     role = "engine",
@@ -62,8 +107,15 @@ local function packet(kind)
   }
 end
 
+local function packet(kind)
+  local telemetry = lib.read_telemetry(config)
+  return make_packet(kind, telemetry)
+end
+
 local function broadcast_status()
-  lib.send(nil, protocol, packet("status"))
+  local telemetry = lib.read_telemetry(config)
+  process_altitude_alerts(telemetry)
+  lib.send(nil, protocol, make_packet("status", telemetry))
 end
 
 local function handle(sender, message)
